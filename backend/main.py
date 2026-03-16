@@ -7,6 +7,7 @@ from db.database import engine, get_db
 from db.models import Base
 from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
 from ingestion.weather import run_weather_ingestion
+from ingestion.stocks import run_stock_ingestion
 
 # Sync engine for fallback/initialization
 SYNC_DATABASE_URL = os.getenv(
@@ -58,3 +59,16 @@ async def debug_gdelt():
 async def ingest_weather(db: AsyncSession = Depends(get_db)):
     num_countries = await run_weather_ingestion(db)
     return {"status": "ok", "countries_processed": num_countries}
+
+@app.post("/ingest/stocks")
+async def ingest_stocks(db: AsyncSession = Depends(get_db)):
+    """
+    Triggers stock market ingestion. 
+    Note: This will take several minutes due to Alpha Vantage rate limiting (5 req/min).
+    """
+    num_processed, skipped = await run_stock_ingestion(db)
+    return {
+        "status": "ok", 
+        "countries_processed": num_processed, 
+        "skipped": skipped
+    }
