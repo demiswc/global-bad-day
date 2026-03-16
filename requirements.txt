@@ -11,3 +11,5 @@ numpy
 python-dotenv
 apscheduler
 yfinance
+python-multipart
+aiofiles

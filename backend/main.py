@@ -11,6 +11,8 @@ from ingestion.stocks import run_stock_ingestion
 from scoring.composite import run_scoring
 from db.models import Base, CompositeScore
 from sqlalchemy import select
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # Sync engine for fallback/initialization
 SYNC_DATABASE_URL = os.getenv(
@@ -36,6 +38,13 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan
 )
+
+# Mount frontend as static files
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse("../frontend/index.html")
 
 @app.get("/health")
 async def health():

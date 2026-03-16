@@ -4,11 +4,364 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Global Bad Day Index</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --ocean-blue: #0d1b2a;
+            --panel-bg: #111827;
+            --text-white: #ffffff;
+            --no-data: #1a1a2e;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-white);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: 2rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #subtitle {
+            margin: 5px 0;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+
+        #date-display {
+            font-size: 0.8rem;
+            opacity: 0.5;
+        }
+
+        #map-container {
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--ocean-blue);
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .country {
+            stroke: #000;
+            stroke-width: 0.2px;
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+
+        .country:hover {
+            filter: brightness(1.2);
+        }
+
+        .convergence {
+            animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { stroke: #ff0000; stroke-width: 0.5px; }
+            50% { stroke: #ff0000; stroke-width: 2px; }
+        }
+
+        #legend {
+            position: absolute;
+            bottom: 40px;
+            left: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 0.8rem;
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+
+        #legend-gradient {
+            width: 200px;
+            height: 12px;
+            background: linear-gradient(to right, #1a3a2a, #8b6914, #8b1a1a);
+            border-radius: 6px;
+        }
+
+        #tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 100;
+        }
+
+        #detail-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 100%;
+            width: 320px;
+            background-color: var(--panel-bg);
+            box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+            padding: 40px 30px;
+            box-sizing: border-box;
+            z-index: 200;
+            transform: translateX(100%);
+            transition: transform 0.3s ease-out;
+        }
+
+        #detail-panel.open {
+            transform: translateX(0);
+        }
+
+        #close-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            opacity: 0.5;
+        }
+
+        #close-panel:hover {
+            opacity: 1;
+        }
+
+        #panel-country {
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+        }
+
+        #panel-score {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 30px;
+            color: #ff4d4d;
+        }
+
+        .signal-bar-container {
+            margin-bottom: 20px;
+        }
+
+        .signal-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .signal-bar-bg {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .signal-bar-fill {
+            height: 100%;
+            background: #8b1a1a;
+            border-radius: 3px;
+        }
+
+        .convergence-warning {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            color: #ffcccc;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 30px;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <div id="app">Loading...</div>
+    <div id="header">
+        <h1>Global Bad Day Index</h1>
+        <p id="subtitle">Mapping moments when everything went wrong simultaneously</p>
+        <p id="date-display">Today: March 16, 2026</p>
+    </div>
+
+    <div id="map-container">
+        <svg id="map"></svg>
+    </div>
+
+    <div id="legend">
+        <span>Good day</span>
+        <div id="legend-gradient"></div>
+        <span>Bad day</span>
+    </div>
+
+    <div id="tooltip" style="display:none"></div>
+
+    <div id="detail-panel">
+        <button id="close-panel">×</button>
+        <h2 id="panel-country">United States</h2>
+        <div id="panel-score">48%</div>
+        <div id="convergence-msg" class="convergence-warning">CONVERGENCE EVENT: All triggers activated</div>
+        <div id="panel-signals">
+            <!-- Signal bars will be injected here -->
+        </div>
+    </div>
+
     <script>
-        console.log("Frontend loaded");
+        const numericToAlpha2 = {
+            840:"US", 826:"GB", 276:"DE", 250:"FR", 392:"JP", 156:"CN", 356:"IN", 76:"BR", 36:"AU", 643:"RU", 
+            710:"ZA", 484:"MX", 32:"AR", 792:"TR", 360:"ID", 586:"PK", 566:"NG", 818:"EG", 804:"UA", 682:"SA", 
+            410:"KR", 724:"ES", 380:"IT", 528:"NL", 56:"BE", 752:"SE", 578:"NO", 208:"DK", 246:"FI", 40:"AT", 
+            620:" Portugal", 300:"GR", 703:"SK", 616:"PL", 348:"HU", 203:"CZ", 642:"RO", 100:"BG", 191:"HR", 
+            124:"CA", 554:"NZ", 458:"MY", 702:"SG", 764:"TH", 704:"VN", 784:"AE", 634:"QA", 414:"KW", 368:"IQ", 
+            364:"IR", 760:"SY", 422:"LB", 400:"JO", 376:"IL"
+        };
+
+        const countryNames = {
+            "US": "United States", "GB": "United Kingdom", "DE": "Germany", "FR": "France", "JP": "Japan",
+            "CN": "China", "IN": "India", "BR": "Brazil", "AU": "Australia", "RU": "Russia",
+            "ZA": "South Africa", "MX": "Mexico", "AR": "Argentina", "TR": "Turkey", "ID": "Indonesia",
+            "PK": "Pakistan", "NG": "Nigeria", "EG": "Egypt", "UA": "Ukraine", "SA": "Saudi Arabia",
+            "KR": "South Korea", "ES": "Spain", "IT": "Italy", "NL": "Netherlands", "BE": "Belgium",
+            "SE": "Sweden", "NO": "Norway", "DK": "Denmark", "FI": "Finland", "AT": "Austria",
+            "PT": "Portugal", "GR": "Greece", "SK": "Slovakia", "PL": "Poland", "HU": "Hungary",
+            "CZ": "Czech Republic", "RO": "Romania", "BG": "Bulgaria", "HR": "Croatia", "CA": "Canada",
+            "NZ": "New Zealand", "MY": "Malaysia", "SG": "Singapore", "TH": "Thailand", "VN": "Vietnam",
+            "AE": "United Arab Emirates", "QA": "Qatar", "KW": "Kuwait", "IQ": "Iraq", "IR": "Iran",
+            "SY": "Syria", "LB": "Lebanon", "JO": "Jordan", "IL": "Israel"
+        };
+
+        const colorScale = d3.scaleSequential()
+            .interpolator(t => {
+                if (t <= 0.5) return d3.interpolateRgb("#1a3a2a", "#8b6914")(t * 2);
+                return d3.interpolateRgb("#8b6914", "#8b1a1a")((t - 0.5) * 2);
+            })
+            .domain([0, 1]);
+
+        const svg = d3.select("#map");
+        const tooltip = d3.select("#tooltip");
+        const panel = d3.select("#detail-panel");
+
+        async function init() {
+            try {
+                const [world, scores] = await Promise.all([
+                    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'),
+                    d3.json('http://localhost:8000/scores/today')
+                ]);
+
+                const scoreMap = {};
+                scores.forEach(s => {
+                    scoreMap[s.country_code] = s;
+                });
+
+                const countries = topojson.feature(world, world.objects.countries).features;
+                const projection = d3.geoNaturalEarth1().fitSize([window.innerWidth, window.innerHeight], {type: "Sphere"});
+                const path = d3.geoPath().projection(projection);
+
+                svg.append("g")
+                    .selectAll("path")
+                    .data(countries)
+                    .enter()
+                    .append("path")
+                    .attr("d", path)
+                    .attr("class", d => {
+                        const alpha2 = numericToAlpha2[d.id];
+                        const scoreData = scoreMap[alpha2];
+                        return `country ${scoreData && scoreData.convergence_flag ? 'convergence' : ''}`;
+                    })
+                    .attr("fill", d => {
+                        const alpha2 = numericToAlpha2[d.id];
+                        const scoreData = scoreMap[alpha2];
+                        return scoreData ? colorScale(scoreData.bad_day_score) : "var(--no-data)";
+                    })
+                    .on("mouseover", (event, d) => {
+                        const alpha2 = numericToAlpha2[d.id];
+                        const scoreData = scoreMap[alpha2];
+                        const name = countryNames[alpha2] || d.properties.name;
+                        
+                        tooltip.style("display", "block")
+                            .html(`<strong>${name}</strong><br>Bad Day Score: ${scoreData ? (scoreData.bad_day_score * 100).toFixed(0) : 'No Data'}%`);
+                    })
+                    .on("mousemove", (event) => {
+                        tooltip.style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 20) + "px");
+                    })
+                    .on("mouseout", () => {
+                        tooltip.style("display", "none");
+                    })
+                    .on("click", (event, d) => {
+                        const alpha2 = numericToAlpha2[d.id];
+                        const scoreData = scoreMap[alpha2];
+                        const name = countryNames[alpha2] || d.properties.name;
+                        
+                        if (scoreData) {
+                            showDetail(name, scoreData);
+                        }
+                    });
+
+                // Detail Panel Logic
+                d3.select("#close-panel").on("click", () => {
+                    panel.classed("open", false);
+                });
+
+            } catch (error) {
+                console.error("Initialization failed:", error);
+            }
+        }
+
+        function showDetail(name, data) {
+            d3.select("#panel-country").text(name);
+            d3.select("#panel-score").text((data.bad_day_score * 100).toFixed(0) + "%");
+            d3.select("#convergence-msg").style("display", data.convergence_flag ? "block" : "none");
+            
+            // Dummy breakdown since the GET /scores/today endpoint doesn't return raw signals yet
+            // In a real app, you'd fetch the breakdown or include it in the response
+            const signals = [
+                { label: "News Sentiment", value: 0.4 },
+                { label: "Stock Drop", value: 0.3 },
+                { label: "Weather Anomaly", value: 0.2 }
+            ];
+
+            const signalsDiv = d3.select("#panel-signals");
+            signalsDiv.html("");
+            
+            signals.forEach(s => {
+                const container = signalsDiv.append("div").attr("class", "signal-bar-container");
+                container.append("div").attr("class", "signal-label")
+                    .html(`<span>${s.label}</span><span>${(s.value * 100).toFixed(0)}%</span>`);
+                
+                const barBg = container.append("div").attr("class", "signal-bar-bg");
+                barBg.append("div").attr("class", "signal-bar-fill")
+                    .style("width", (s.value * 100) + "%");
+            });
+
+            panel.classed("open", true);
+        }
+
+        window.addEventListener("resize", () => {
+            // Reposition map on resize if needed
+        });
+
+        init();
     </script>
 </body>
 </html>
