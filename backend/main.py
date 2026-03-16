@@ -9,8 +9,8 @@ from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
 from ingestion.weather import run_weather_ingestion
 from ingestion.stocks import run_stock_ingestion
 from scoring.composite import run_scoring
-from db.models import Base, CompositeScore, RawSignal, NormalisedScore
-from sqlalchemy import select, delete, and_
+from db.models import Base, CompositeScore, RawSignal, NormalisedScore, Headline
+from sqlalchemy import select, delete, and_, desc
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -126,6 +126,85 @@ async def get_today_scores(db: AsyncSession = Depends(get_db)):
         }
         for s in scores
     ]
+
+@app.get("/headlines/{country_code}")
+async def get_headlines(country_code: str, db: AsyncSession = Depends(get_db)):
+    """
+    Returns today's top negative headlines for a country.
+    """
+    today = date.today()
+    stmt = select(Headline).where(
+        and_(Headline.country_code == country_code.upper(), Headline.date == today)
+    ).order_by(Headline.tone.asc()).limit(5)
+    
+    result = await db.execute(stmt)
+    headlines = result.scalars().all()
+    
+    return [
+        {"url": h.url, "source_name": h.source_name, "tone": h.tone}
+        for h in headlines
+    ]
+
+@app.get("/sources/{country_code}")
+async def get_sources(country_code: str, db: AsyncSession = Depends(get_db)):
+    """
+    Returns a structured breakdown of signals and headlines for a country.
+    """
+    today = date.today()
+    country_code = country_code.upper()
+    
+    # Get composite score
+    composite_stmt = select(CompositeScore).where(
+        and_(CompositeScore.country_code == country_code, CompositeScore.date == today)
+    )
+    composite_result = await db.execute(composite_stmt)
+    composite = composite_result.scalar_one_or_none()
+    
+    if not composite:
+        return {"status": "error", "message": "No data found for this country today"}
+    
+    # Get normalized scores
+    scores_stmt = select(NormalisedScore).where(
+        and_(NormalisedScore.country_code == country_code, NormalisedScore.date == today)
+    )
+    scores_result = await db.execute(scores_stmt)
+    scores = scores_result.scalars().all()
+    
+    # Get headlines
+    headlines_stmt = select(Headline).where(
+        and_(Headline.country_code == country_code, Headline.date == today)
+    ).order_by(Headline.tone.asc()).limit(5)
+    headlines_result = await db.execute(headlines_stmt)
+    headlines = headlines_result.scalars().all()
+    
+    # Build signals list
+    signals = []
+    source_info = {
+        "gdelt_sentiment": {"label": "News sentiment", "source_name": "GDELT Project", "source_url": "https://gdeltproject.org"},
+        "stock_change": {"label": "Stock market", "source_name": "Yahoo Finance", "source_url": "https://finance.yahoo.com"},
+        "weather_anomaly": {"label": "Weather", "source_name": "Open-Meteo", "source_url": "https://open-meteo.com"}
+    }
+    
+    for s in scores:
+        info = source_info.get(s.signal_type, {"label": s.signal_type, "source_name": "Unknown", "source_url": "#"})
+        signals.append({
+            "type": s.signal_type,
+            "score": s.score,
+            "label": info["label"],
+            "source_name": info["source_name"],
+            "source_url": info["source_url"]
+        })
+        
+    return {
+        "country_code": country_code,
+        "bad_day_score": composite.bad_day_score,
+        "signal_count": composite.signal_count,
+        "signals": signals,
+        "headlines": [
+            {"url": h.url, "source_name": h.source_name, "tone": h.tone}
+            for h in headlines
+        ]
+    }
 
 @app.delete("/scores/clear")
 async def clear_scores(target_date: str = None, db: AsyncSession = Depends(get_db)):

@@ -5,9 +5,10 @@ import zipfile
 import logging
 import pandas as pd
 import httpx
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.models import RawSignal
+from sqlalchemy import delete, and_
+from db.models import RawSignal, Headline
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,10 +44,10 @@ def extract_country_codes(locations_str: str) -> list[str]:
                 codes.append(code.upper())
     return list(set(codes)) # Unique codes per row
 
-async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
+async def fetch_latest_gdelt_sentiment() -> tuple[dict[str, float], list[dict]]:
     """
     Fetches the latest GKG file from GDELT, parses sentiment, 
-    and returns a normalized badness score per country.
+    and returns a normalized badness score per country AND a list of negative headlines.
     """
     logger.info("Fetching latest GDELT update information...")
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -72,16 +73,16 @@ async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
     with zipfile.ZipFile(io.BytesIO(gkg_resp.content)) as z:
         csv_filename = z.namelist()[0]
         with z.open(csv_filename) as f:
-            # GDELT GKG V2 columns
+            # Column 2: SourceCommonName
+            # Column 4: DocumentIdentifier (URL)
             # Column 9: Locations (structured)
             # Column 15: V2Tone (sentiment)
-            # Using usecols to save memory
             df = pd.read_csv(
                 f, 
                 sep='\t', 
                 header=None, 
-                usecols=[9, 15],
-                names=['Locations', 'V2Tone'],
+                usecols=[2, 4, 9, 15],
+                names=['SourceCommonName', 'DocumentIdentifier', 'Locations', 'V2Tone'],
                 encoding='utf-8',
                 on_bad_lines='skip'
             )
@@ -99,7 +100,7 @@ async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
     df['fips_list'] = df['Locations'].apply(extract_country_codes)
     
     # Explode the list of FIPS codes so each has its own row with the same tone
-    df = df.explode('fips_list')
+    df_exploded = df.explode('fips_list')
 
     # Map FIPS to ISO
     def map_to_iso(fips):
@@ -107,23 +108,41 @@ async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
             return None
         return FIPS_TO_ISO.get(fips)
 
-    df['country_code'] = df['fips_list'].apply(map_to_iso)
+    df_exploded['country_code'] = df_exploded['fips_list'].apply(map_to_iso)
 
     # Drop rows with missing data or no ISO mapping
-    df = df.dropna(subset=['tone', 'country_code'])
+    df_clean = df_exploded.dropna(subset=['tone', 'country_code'])
     
-    # Group by ISO country code and calculate mean tone
-    country_tones = df.groupby('country_code')['tone'].mean()
+    # Process headlines (from negative sentiment only)
+    # Keep only rows where tone < -2.0 and URL starts with http
+    headlines_df = df_clean[
+        (df_clean['tone'] < -2.0) & 
+        (df_clean['DocumentIdentifier'].str.startswith('http', na=False))
+    ].copy()
+
+    # Limit to 500 headline records to keep database lean
+    headlines_df = headlines_df.head(500)
+    
+    headlines_list = []
+    for _, row in headlines_df.iterrows():
+        headlines_list.append({
+            "country_code": row['country_code'],
+            "url": row['DocumentIdentifier'],
+            "source_name": row['SourceCommonName'],
+            "tone": row['tone']
+        })
+
+    # Group by ISO country code and calculate mean tone for badness scores
+    country_tones = df_clean.groupby('country_code')['tone'].mean()
 
     # Normalize tone to 0-1 badness score
-    # score = (tone * -1 + 100) / 200, clamped to 0.0–1.0
     def normalize_tone(tone):
         score = (tone * -1 + 100) / 200
         return max(0.0, min(1.0, score))
 
     badness_scores = country_tones.apply(normalize_tone).to_dict()
     
-    return badness_scores
+    return badness_scores, headlines_list
 
 async def save_gdelt_scores(scores: dict[str, float], db: AsyncSession):
     """
@@ -146,17 +165,58 @@ async def save_gdelt_scores(scores: dict[str, float], db: AsyncSession):
         await db.commit()
         logger.info(f"Saved {len(signals)} GDELT sentiment signals to database.")
 
+async def save_headlines(headlines: list[dict], db: AsyncSession):
+    """
+    Saves the extracted headlines to the database.
+    """
+    if not headlines:
+        return
+
+    today = date.today()
+    timestamp = datetime.utcnow()
+    
+    # Affected countries
+    countries = list(set([h['country_code'] for h in headlines]))
+    
+    # Delete today's existing headlines for these countries to avoid duplicates
+    await db.execute(
+        delete(Headline).where(
+            and_(
+                Headline.date == today,
+                Headline.country_code.in_(countries)
+            )
+        )
+    )
+    
+    new_headlines = [
+        Headline(
+            country_code=h['country_code'],
+            date=today,
+            url=h['url'],
+            source_name=h['source_name'],
+            tone=h['tone'],
+            timestamp=timestamp
+        )
+        for h in headlines
+    ]
+    
+    db.add_all(new_headlines)
+    await db.commit()
+    logger.info(f"Saved {len(new_headlines)} headlines to database.")
+
 async def run_gdelt_ingestion(db: AsyncSession):
     """
     Orchestrates the GDELT ingestion process.
     """
     try:
         logger.info("Starting GDELT news sentiment ingestion...")
-        scores = await fetch_latest_gdelt_sentiment()
+        scores, headlines = await fetch_latest_gdelt_sentiment()
         
-        logger.info(f"Found news sentiment for {len(scores)} countries.")
+        logger.info(f"Found news sentiment for {len(scores)} countries and {len(headlines)} headlines.")
         
         await save_gdelt_scores(scores, db)
+        await save_headlines(headlines, db)
+        
         logger.info("GDELT ingestion completed successfully.")
         return len(scores)
     except Exception as e:

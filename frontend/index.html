@@ -195,6 +195,80 @@
             margin-bottom: 30px;
             display: none;
         }
+
+        .section-header {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: rgba(255,255,255,0.4);
+            margin: 30px 0 15px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 5px;
+        }
+
+        .source-link {
+            display: block;
+            color: #4da6ff;
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+
+        .source-link:hover {
+            text-decoration: underline;
+        }
+
+        .headline-link {
+            display: block;
+            color: var(--text-white);
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            border-left: 2px solid #8b1a1a;
+        }
+
+        .headline-link:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .headline-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            opacity: 0.6;
+            margin-bottom: 4px;
+        }
+
+        #panel-loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--panel-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            display: none;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid #ff4d4d;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -218,12 +292,19 @@
 
     <div id="detail-panel">
         <button id="close-panel">×</button>
+        <div id="panel-loader"><div class="spinner"></div></div>
         <h2 id="panel-country">United States</h2>
         <div id="panel-score">48%</div>
         <div id="convergence-msg" class="convergence-warning">CONVERGENCE EVENT: All triggers activated</div>
-        <div id="panel-signals">
-            <!-- Signal bars will be injected here -->
-        </div>
+        
+        <div class="section-header">Signals</div>
+        <div id="panel-signals"></div>
+
+        <div class="section-header">Sources</div>
+        <div id="panel-sources"></div>
+
+        <div class="section-header">Latest Headlines</div>
+        <div id="panel-headlines"></div>
     </div>
 
     <script>
@@ -343,11 +424,10 @@
                     })
                     .on("click", (event, d) => {
                         const alpha2 = numericToAlpha2[d.id];
-                        const scoreData = scoreMap[alpha2];
                         const name = countryNames[alpha2] || d.properties.name;
                         
-                        if (scoreData) {
-                            showDetail(name, scoreData);
+                        if (alpha2) {
+                            showDetail(name, alpha2);
                         }
                     });
 
@@ -360,35 +440,78 @@
                 console.error("Initialization failed:", error);
             }
         }
-
-        function showDetail(name, data) {
+        async function showDetail(name, countryCode) {
             d3.select("#panel-country").text(name);
-            d3.select("#panel-score").text((data.bad_day_score * 100).toFixed(0) + "%");
-            d3.select("#convergence-msg").style("display", data.convergence_flag ? "block" : "none");
-            
-            // Dummy breakdown since the GET /scores/today endpoint doesn't return raw signals yet
-            // In a real app, you'd fetch the breakdown or include it in the response
-            const signals = [
-                { label: "News Sentiment", value: 0.4 },
-                { label: "Stock Drop", value: 0.3 },
-                { label: "Weather Anomaly", value: 0.2 }
-            ];
-
-            const signalsDiv = d3.select("#panel-signals");
-            signalsDiv.html("");
-            
-            signals.forEach(s => {
-                const container = signalsDiv.append("div").attr("class", "signal-bar-container");
-                container.append("div").attr("class", "signal-label")
-                    .html(`<span>${s.label}</span><span>${(s.value * 100).toFixed(0)}%</span>`);
-                
-                const barBg = container.append("div").attr("class", "signal-bar-bg");
-                barBg.append("div").attr("class", "signal-bar-fill")
-                    .style("width", (s.value * 100) + "%");
-            });
-
+            d3.select("#panel-loader").style("display", "flex");
             panel.classed("open", true);
+            
+            try {
+                const response = await fetch(`http://localhost:8000/sources/${countryCode}`);
+                const data = await response.json();
+                
+                if (data.status === "error") {
+                    d3.select("#panel-score").text("N/A");
+                    d3.select("#panel-signals").html("<p style='font-size:0.8rem;opacity:0.5'>No signal data available</p>");
+                    d3.select("#panel-sources").html("");
+                    d3.select("#panel-headlines").html("");
+                    return;
+                }
+
+                d3.select("#panel-score").text((data.bad_day_score * 100).toFixed(0) + "%");
+                d3.select("#convergence-msg").style("display", data.convergence_flag ? "block" : "none");
+                
+                // Signals
+                const signalsDiv = d3.select("#panel-signals");
+                signalsDiv.html("");
+                data.signals.forEach(s => {
+                    const container = signalsDiv.append("div").attr("class", "signal-bar-container");
+                    container.append("div").attr("class", "signal-label")
+                        .html(`<span>${s.label}</span><span>${(s.score * 100).toFixed(0)}%</span>`);
+                    
+                    const barBg = container.append("div").attr("class", "signal-bar-bg");
+                    barBg.append("div").attr("class", "signal-bar-fill")
+                        .style("width", (s.score * 100) + "%");
+                });
+
+                // Sources
+                const sourcesDiv = d3.select("#panel-sources");
+                sourcesDiv.html("");
+                data.signals.forEach(s => {
+                    sourcesDiv.append("a")
+                        .attr("href", s.source_url)
+                        .attr("target", "_blank")
+                        .attr("class", "source-link")
+                        .text(`${s.label}: ${s.source_name}`);
+                });
+
+                // Headlines
+                const headlinesDiv = d3.select("#panel-headlines");
+                headlinesDiv.html("");
+                if (data.headlines && data.headlines.length > 0) {
+                    data.headlines.forEach(h => {
+                        const link = headlinesDiv.append("a")
+                            .attr("href", h.url)
+                            .attr("target", "_blank")
+                            .attr("class", "headline-link");
+                        
+                        link.append("div").attr("class", "headline-meta")
+                            .html(`<span>${h.source_name}</span><span>Tone: ${h.tone.toFixed(1)}</span>`);
+                        
+                        // Extract domain or short title if URL is long? 
+                        // For now just show the URL or placeholder text
+                        link.append("div").text(h.url.substring(0, 100) + "...");
+                    });
+                } else {
+                    headlinesDiv.html("<p style='font-size:0.8rem;opacity:0.5'>No negative headlines today</p>");
+                }
+
+            } catch (err) {
+                console.error("Failed to fetch sources:", err);
+            } finally {
+                d3.select("#panel-loader").style("display", "none");
+            }
         }
+
 
         window.addEventListener("resize", () => {
             // Reposition map on resize if needed
