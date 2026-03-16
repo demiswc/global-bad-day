@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 from db.database import engine, get_db
 from db.models import Base
 from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
+from ingestion.weather import run_weather_ingestion
 
 # Sync engine for fallback/initialization
 SYNC_DATABASE_URL = os.getenv(
@@ -52,3 +53,8 @@ async def ingest_gdelt(db: AsyncSession = Depends(get_db)):
 @app.get("/debug/gdelt")
 async def debug_gdelt():
     return await debug_gdelt_raw()
+
+@app.post("/ingest/weather")
+async def ingest_weather(db: AsyncSession = Depends(get_db)):
+    num_countries = await run_weather_ingestion(db)
+    return {"status": "ok", "countries_processed": num_countries}
