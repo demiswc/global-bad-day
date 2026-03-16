@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import create_engine, text
 from db.database import engine, get_db
 from db.models import Base
+from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
 
 # Sync engine for fallback/initialization
 SYNC_DATABASE_URL = os.getenv(
@@ -42,3 +43,12 @@ async def db_check(db: AsyncSession = Depends(get_db)):
         return {"db": "ok"}
     except Exception as e:
         return {"db": "error", "detail": str(e)}
+
+@app.post("/ingest/gdelt")
+async def ingest_gdelt(db: AsyncSession = Depends(get_db)):
+    num_countries = await run_gdelt_ingestion(db)
+    return {"status": "ok", "countries_processed": num_countries}
+
+@app.get("/debug/gdelt")
+async def debug_gdelt():
+    return await debug_gdelt_raw()
