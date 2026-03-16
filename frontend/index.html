@@ -228,26 +228,47 @@
 
     <script>
         const numericToAlpha2 = {
-            840:"US", 826:"GB", 276:"DE", 250:"FR", 392:"JP", 156:"CN", 356:"IN", 76:"BR", 36:"AU", 643:"RU", 
-            710:"ZA", 484:"MX", 32:"AR", 792:"TR", 360:"ID", 586:"PK", 566:"NG", 818:"EG", 804:"UA", 682:"SA", 
-            410:"KR", 724:"ES", 380:"IT", 528:"NL", 56:"BE", 752:"SE", 578:"NO", 208:"DK", 246:"FI", 40:"AT", 
-            620:" Portugal", 300:"GR", 703:"SK", 616:"PL", 348:"HU", 203:"CZ", 642:"RO", 100:"BG", 191:"HR", 
-            124:"CA", 554:"NZ", 458:"MY", 702:"SG", 764:"TH", 704:"VN", 784:"AE", 634:"QA", 414:"KW", 368:"IQ", 
-            364:"IR", 760:"SY", 422:"LB", 400:"JO", 376:"IL"
+          4:"AF", 8:"AL", 12:"DZ", 24:"AO", 32:"AR", 36:"AU", 40:"AT",
+          50:"BD", 56:"BE", 68:"BO", 76:"BR", 100:"BG", 104:"MM", 116:"KH",
+          120:"CM", 124:"CA", 152:"CL", 156:"CN", 170:"CO", 191:"HR", 192:"CU",
+          203:"CZ", 204:"BJ", 208:"DK", 218:"EC", 818:"EG", 231:"ET", 246:"FI",
+          250:"FR", 266:"GA", 276:"DE", 288:"GH", 300:"GR", 320:"GT", 324:"GN",
+          332:"HT", 340:"HN", 348:"HU", 356:"IN", 360:"ID", 364:"IR", 368:"IQ",
+          376:"IL", 380:"IT", 388:"JM", 392:"JP", 400:"JO", 404:"KE", 408:"KP",
+          410:"KR", 414:"KW", 418:"LA", 422:"LB", 430:"LR", 434:"LY", 440:"LT",
+          442:"LU", 450:"MG", 458:"MY", 466:"ML", 484:"MX", 504:"MA", 508:"MZ",
+          516:"NA", 524:"NP", 528:"NL", 558:"NI", 562:"NE", 566:"NG", 578:"NO",
+          586:"PK", 591:"PA", 598:"PG", 600:"PY", 604:"PE", 608:"PH", 616:"PL",
+          620:"PT", 630:"PR", 634:"QA", 642:"RO", 643:"RU", 646:"RW", 682:"SA",
+          686:"SN", 694:"SL", 706:"SO", 710:"ZA", 716:"ZW", 724:"ES", 729:"SD",
+          740:"SR", 752:"SE", 756:"CH", 760:"SY", 762:"TJ", 764:"TH", 780:"TT",
+          788:"TN", 792:"TR", 800:"UG", 804:"UA", 784:"AE", 826:"GB", 840:"US",
+          858:"UY", 860:"UZ", 862:"VE", 704:"VN", 887:"YE", 894:"ZM"
         };
 
         const countryNames = {
-            "US": "United States", "GB": "United Kingdom", "DE": "Germany", "FR": "France", "JP": "Japan",
-            "CN": "China", "IN": "India", "BR": "Brazil", "AU": "Australia", "RU": "Russia",
-            "ZA": "South Africa", "MX": "Mexico", "AR": "Argentina", "TR": "Turkey", "ID": "Indonesia",
-            "PK": "Pakistan", "NG": "Nigeria", "EG": "Egypt", "UA": "Ukraine", "SA": "Saudi Arabia",
-            "KR": "South Korea", "ES": "Spain", "IT": "Italy", "NL": "Netherlands", "BE": "Belgium",
-            "SE": "Sweden", "NO": "Norway", "DK": "Denmark", "FI": "Finland", "AT": "Austria",
-            "PT": "Portugal", "GR": "Greece", "SK": "Slovakia", "PL": "Poland", "HU": "Hungary",
-            "CZ": "Czech Republic", "RO": "Romania", "BG": "Bulgaria", "HR": "Croatia", "CA": "Canada",
-            "NZ": "New Zealand", "MY": "Malaysia", "SG": "Singapore", "TH": "Thailand", "VN": "Vietnam",
-            "AE": "United Arab Emirates", "QA": "Qatar", "KW": "Kuwait", "IQ": "Iraq", "IR": "Iran",
-            "SY": "Syria", "LB": "Lebanon", "JO": "Jordan", "IL": "Israel"
+            "AF": "Afghanistan", "AL": "Albania", "DZ": "Algeria", "AO": "Angola", "AR": "Argentina",
+            "AU": "Australia", "AT": "Austria", "BD": "Bangladesh", "BE": "Belgium", "BO": "Bolivia",
+            "BR": "Brazil", "BG": "Bulgaria", "MM": "Myanmar", "KH": "Cambodia", "CM": "Cameroon",
+            "CA": "Canada", "CL": "Chile", "CN": "China", "CO": "Colombia", "HR": "Croatia",
+            "CU": "Cuba", "CZ": "Czech Republic", "BJ": "Benin", "DK": "Denmark", "EC": "Ecuador",
+            "EG": "Egypt", "ET": "Ethiopia", "FI": "Finland", "FR": "France", "GA": "Gabon",
+            "DE": "Germany", "GH": "Ghana", "GR": "Greece", "GT": "Guatemala", "GN": "Guinea",
+            "HT": "Haiti", "HN": "Honduras", "HU": "Hungary", "IN": "India", "ID": "Indonesia",
+            "IR": "Iran", "IQ": "Iraq", "IL": "Israel", "IT": "Italy", "JM": "Jamaica",
+            "JP": "Japan", "JO": "Jordan", "KE": "Kenya", "KP": "North Korea", "KR": "South Korea",
+            "KW": "Kuwait", "LA": "Laos", "LB": "Lebanon", "LR": "Liberia", "LY": "Libya",
+            "LT": "Lithuania", "LU": "Luxembourg", "MG": "Madagascar", "MY": "Malaysia", "ML": "Mali",
+            "MX": "Mexico", "MA": "Morocco", "MZ": "Mozambique", "NA": "Namibia", "NP": "Nepal",
+            "NL": "Netherlands", "NI": "Nicaragua", "NE": "Niger", "NG": "Nigeria", "NO": "Norway",
+            "PK": "Pakistan", "PA": "Panama", "PG": "Papua New Guinea", "PY": "Paraguay", "PE": "Peru",
+            "PH": "Philippines", "PL": "Poland", "PT": "Portugal", "PR": "Puerto Rico", "QA": "Qatar",
+            "RO": "Romania", "RU": "Russia", "RW": "Rwanda", "SA": "Saudi Arabia", "SN": "Senegal",
+            "SL": "Sierra Leone", "SO": "Somalia", "ZA": "South Africa", "ZW": "Zimbabwe", "ES": "Spain",
+            "SD": "Sudan", "SR": "Suriname", "SE": "Sweden", "CH": "Switzerland", "SY": "Syria",
+            "TJ": "Tajikistan", "TH": "Thailand", "TT": "Trinidad and Tobago", "TN": "Tunisia", "TR": "Turkey",
+            "UG": "Uganda", "UA": "Ukraine", "AE": "United Arab Emirates", "GB": "United Kingdom", "US": "United States",
+            "UY": "Uruguay", "UZ": "Uzbekistan", "VE": "Venezuela", "VN": "Vietnam", "YE": "Yemen", "ZM": "Zambia"
         };
 
         const colorScale = d3.scaleSequential()

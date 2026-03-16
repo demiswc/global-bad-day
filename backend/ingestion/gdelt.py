@@ -1,4 +1,6 @@
 import io
+import json
+import os
 import zipfile
 import logging
 import pandas as pd
@@ -12,6 +14,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GDELT_LAST_UPDATE_URL = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+
+# Load FIPS to ISO mapping
+FIPS_TO_ISO = {}
+try:
+    mapping_path = os.path.join(os.path.dirname(__file__), "..", "data", "fips_to_iso.json")
+    with open(mapping_path, "r") as f:
+        FIPS_TO_ISO = json.load(f)
+except Exception as e:
+    logger.error(f"Failed to load FIPS to ISO mapping: {e}")
 
 def extract_country_code(location_str):
     """
@@ -86,12 +97,18 @@ async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
             return None
 
     df['tone'] = df['V2Tone'].apply(parse_tone)
-    df['country_code'] = df['Locations'].apply(extract_country_code)
+    df['fips_code'] = df['Locations'].apply(extract_country_code)
 
-    # Drop rows with missing data
+    # Map FIPS to ISO
+    def map_to_iso(fips):
+        return FIPS_TO_ISO.get(fips)
+
+    df['country_code'] = df['fips_code'].apply(map_to_iso)
+
+    # Drop rows with missing data or no ISO mapping
     df = df.dropna(subset=['tone', 'country_code'])
     
-    # Group by country and calculate mean tone
+    # Group by ISO country code and calculate mean tone
     country_tones = df.groupby('country_code')['tone'].mean()
 
     # Normalize tone to 0-1 badness score

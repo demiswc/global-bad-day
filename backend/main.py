@@ -9,8 +9,8 @@ from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
 from ingestion.weather import run_weather_ingestion
 from ingestion.stocks import run_stock_ingestion
 from scoring.composite import run_scoring
-from db.models import Base, CompositeScore
-from sqlalchemy import select
+from db.models import Base, CompositeScore, RawSignal, NormalisedScore
+from sqlalchemy import select, delete, and_
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -126,3 +126,36 @@ async def get_today_scores(db: AsyncSession = Depends(get_db)):
         }
         for s in scores
     ]
+
+@app.delete("/scores/clear")
+async def clear_scores(target_date: str = None, db: AsyncSession = Depends(get_db)):
+    """
+    Deletes all records from RawSignal, NormalisedScore, and CompositeScore for a specific date.
+    Date format: YYYY-MM-DD. Defaults to today.
+    DEV/ADMIN ONLY - Remove before production.
+    """
+    if target_date:
+        try:
+            parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            return {"status": "error", "message": "Invalid date format. Use YYYY-MM-DD"}
+    else:
+        parsed_date = date.today()
+
+    # Define range for RawSignal (timestamp)
+    start_dt = datetime.combine(parsed_date, datetime.min.time())
+    end_dt = datetime.combine(parsed_date, datetime.max.time())
+
+    # Delete RawSignals
+    await db.execute(delete(RawSignal).where(
+        and_(RawSignal.timestamp >= start_dt, RawSignal.timestamp <= end_dt)
+    ))
+
+    # Delete NormalisedScores
+    await db.execute(delete(NormalisedScore).where(NormalisedScore.date == parsed_date))
+
+    # Delete CompositeScores
+    await db.execute(delete(CompositeScore).where(CompositeScore.date == parsed_date))
+
+    await db.commit()
+    return {"status": "ok", "message": f"Cleared data for {parsed_date}"}
