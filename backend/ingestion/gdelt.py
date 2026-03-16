@@ -21,28 +21,27 @@ try:
     mapping_path = os.path.join(os.path.dirname(__file__), "..", "data", "fips_to_iso.json")
     with open(mapping_path, "r") as f:
         FIPS_TO_ISO = json.load(f)
+    logger.info(f"Loaded {len(FIPS_TO_ISO)} FIPS->ISO mappings")
 except Exception as e:
     logger.error(f"Failed to load FIPS to ISO mapping: {e}")
 
-def extract_country_code(location_str):
+def extract_country_codes(locations_str: str) -> list[str]:
     """
-    Extracts the 2-letter country code from GDELT location field.
-    Example: 1#Kabul#AF#AF#... -> AF
+    Extracts 2-letter country codes from GDELT location field.
+    Example: 1#Iran#IR#IR#32#53#IR;...
     """
-    if not isinstance(location_str, str) or not location_str:
-        return None
-    try:
-        # Locations are semicolon separated
-        locations = location_str.split(';')
-        for loc in locations:
-            fields = loc.split('#')
-            if len(fields) >= 3:
-                country_code = fields[2]
-                if len(country_code) == 2:
-                    return country_code
-    except Exception:
-        pass
-    return None
+    if not isinstance(locations_str, str) or not locations_str.strip():
+        return []
+    codes = []
+    for location in locations_str.split(';'):
+        # Split on #
+        parts = location.strip().split('#')
+        if len(parts) >= 3:
+            code = parts[2].strip()
+            # Only take clean 2-letter codes
+            if len(code) == 2 and code.isalpha():
+                codes.append(code.upper())
+    return list(set(codes)) # Unique codes per row
 
 async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
     """
@@ -97,13 +96,18 @@ async def fetch_latest_gdelt_sentiment() -> dict[str, float]:
             return None
 
     df['tone'] = df['V2Tone'].apply(parse_tone)
-    df['fips_code'] = df['Locations'].apply(extract_country_code)
+    df['fips_list'] = df['Locations'].apply(extract_country_codes)
+    
+    # Explode the list of FIPS codes so each has its own row with the same tone
+    df = df.explode('fips_list')
 
     # Map FIPS to ISO
     def map_to_iso(fips):
+        if pd.isna(fips):
+            return None
         return FIPS_TO_ISO.get(fips)
 
-    df['country_code'] = df['fips_code'].apply(map_to_iso)
+    df['country_code'] = df['fips_list'].apply(map_to_iso)
 
     # Drop rows with missing data or no ISO mapping
     df = df.dropna(subset=['tone', 'country_code'])
