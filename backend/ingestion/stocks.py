@@ -9,26 +9,68 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 COUNTRY_INDICES = {
-    "US": "^GSPC",      # S&P 500
-    "GB": "^FTSE",      # FTSE 100
-    "DE": "^GDAXI",     # DAX
-    "FR": "^FCHI",      # CAC 40
-    "JP": "^N225",      # Nikkei 225
-    "CN": "000001.SS",  # Shanghai Composite
-    "IN": "^BSESN",     # BSE Sensex
-    "BR": "^BVSP",      # Bovespa
-    "AU": "^AXJO",      # ASX 200
-    "RU": "IMOEX.ME",   # Moscow Exchange
-    "ZA": "^J203",      # JSE All Share
-    "MX": "^MXX",       # IPC Mexico
-    "AR": "^MERV",      # MERVAL
-    "SA": "^TASI.SR",   # Tadawul
-    "TR": "^XU100",     # BIST 100
-    "ID": "^JKSE",      # Jakarta Composite
-    "PK": "^KSE",       # Karachi Stock Exchange
-    "NG": "^NGSEINDX",  # Nigerian Stock Exchange
-    "EG": "^CASE30",    # Egypt EGX 30
-    "UA": "^PFTS",      # PFTS Ukraine
+    "US": "^GSPC",
+    "GB": "^FTSE",
+    "DE": "^GDAXI",
+    "FR": "^FCHI",
+    "JP": "^N225",
+    "CN": "000001.SS",
+    "IN": "^BSESN",
+    "BR": "^BVSP",
+    "AU": "^AXJO",
+    "ZA": "J203.JO",
+    "MX": "^MXX",
+    "AR": "^MERV",
+    "SA": "^TASI.SR",
+    "ID": "^JKSE",
+    "MY": "^KLSE",
+    "TH": "^SET.BK",
+    "PH": "PSEi.PS",
+    "VN": "^VNINDEX",
+    "KR": "^KS11",
+    "TW": "^TWII",
+    "HK": "^HSI",
+    "SG": "^STI",
+    "PK": "^KSE100",
+    "BD": "^DSEX",
+    "LK": "^CSEALL",
+    "NG": "^NGSEINDX",
+    "KE": "^NSE20",
+    "GH": "^GSE-CI",
+    "EG": "^CASE",
+    "MA": "^MASI",
+    "TN": "^TUNINDEX",
+    "NL": "^AEX",
+    "ES": "^IBEX",
+    "IT": "FTSEMIB.MI",
+    "PT": "^PSI20",
+    "BE": "^BFX",
+    "SE": "^OMX",
+    "NO": "^OSEAX",
+    "DK": "^OMXC25",
+    "FI": "^OMXH25",
+    "AT": "^ATX",
+    "CH": "^SSMI",
+    "PL": "^WIG20",
+    "CZ": "^PX",
+    "HU": "^BUX",
+    "RO": "^BET",
+    "GR": "^ATG",
+    "TR": "XU100.IS",
+    "IL": "^TA125.TA",
+    "QA": "^QSI",
+    "KW": "^KWSE",
+    "BH": "^BHSEASI",
+    "OM": "^MSM30",
+    "JO": "^AMGNRLX",
+    "LB": "^BLOM",
+    "NZ": "^NZ50",
+    "CL": "^IPSA",
+    "CO": "^COLCAP",
+    "PE": "^SPBLPGPT",
+    "VE": "^IBC",
+    "UA": "^PFTS",
+    "KZ": "^KASE",
 }
 
 async def fetch_stock_changes() -> tuple[dict[str, float], list[str]]:

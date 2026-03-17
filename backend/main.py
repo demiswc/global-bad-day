@@ -1,16 +1,16 @@
 import os
-from fastapi import FastAPI, Depends
+import pandas as pd
+from fastapi import FastAPI, Depends, HTTPException
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, select, delete, and_, desc
 from db.database import engine, get_db
 from datetime import date, datetime
-from ingestion.gdelt import run_gdelt_ingestion, debug_gdelt_raw
+from ingestion.gdelt import run_gdelt_ingestion
 from ingestion.weather import run_weather_ingestion
 from ingestion.stocks import run_stock_ingestion
 from scoring.composite import run_scoring
-from db.models import Base, CompositeScore, RawSignal, NormalisedScore, Headline
-from sqlalchemy import select, delete, and_, desc
+from db.models import Base, RawSignal, NormalisedScore, CompositeScore, Headline
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -39,6 +39,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Load country names for global headlines
+COUNTRY_NAMES = {}
+try:
+    centroids_path = os.path.join(os.path.dirname(__file__), "data", "country_centroids.csv")
+    if os.path.exists(centroids_path):
+        df_countries = pd.read_csv(centroids_path)
+        COUNTRY_NAMES = dict(zip(df_countries['country_code'], df_countries['country_name']))
+except Exception as e:
+    print(f"Error loading country names: {e}")
+
 # Mount frontend as static files
 app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 
@@ -63,9 +73,6 @@ async def ingest_gdelt(db: AsyncSession = Depends(get_db)):
     num_countries = await run_gdelt_ingestion(db)
     return {"status": "ok", "countries_processed": num_countries}
 
-@app.get("/debug/gdelt")
-async def debug_gdelt():
-    return await debug_gdelt_raw()
 
 @app.post("/ingest/weather")
 async def ingest_weather(db: AsyncSession = Depends(get_db)):
@@ -126,6 +133,50 @@ async def get_today_scores(db: AsyncSession = Depends(get_db)):
         }
         for s in scores
     ]
+
+@app.get("/headlines/global")
+async def get_global_headlines(db: AsyncSession = Depends(get_db)):
+    """
+    Returns the top 20 most negative headlines globally today.
+    """
+    today = date.today()
+    
+    # Query headlines and join with composite_scores to get bad_day_score
+    # We use an outer join in case some headline countries don't have a composite score today yet
+    stmt = (
+        select(Headline, CompositeScore.bad_day_score)
+        .outerjoin(
+            CompositeScore, 
+            and_(
+                Headline.country_code == CompositeScore.country_code,
+                Headline.date == CompositeScore.date
+            )
+        )
+        .where(Headline.date == today)
+        .order_by(Headline.tone.asc())
+        .limit(20)
+    )
+    
+    result = await db.execute(stmt)
+    rows = result.all()
+    
+    if not rows:
+        return {"message": "No headlines yet — trigger /ingest/gdelt first", "headlines": []}
+        
+    return {
+        "status": "ok",
+        "headlines": [
+            {
+                "country_code": h.country_code,
+                "country_name": COUNTRY_NAMES.get(h.country_code, h.country_code),
+                "url": h.url,
+                "source_name": h.source_name or "Unknown",
+                "tone": h.tone,
+                "bad_day_score": bad_day_score or 0.0
+            }
+            for h, bad_day_score in rows
+        ]
+    }
 
 @app.get("/headlines/{country_code}")
 async def get_headlines(country_code: str, db: AsyncSession = Depends(get_db)):

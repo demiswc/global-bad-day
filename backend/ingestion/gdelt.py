@@ -26,6 +26,12 @@ try:
 except Exception as e:
     logger.error(f"Failed to load FIPS to ISO mapping: {e}")
 
+HEADLINE_BLOCKLIST = {
+    "tvguide.co.uk", "tvguide.com", "imdb.com", "rottentomatoes.com",
+    "metacritic.com", "entertainment.ie", "digitalspy.com",
+    "radiotimes.com", "whats-on-tv.co.uk"
+}
+
 def extract_country_codes(locations_str: str) -> list[str]:
     """
     Extracts 2-letter country codes from GDELT location field.
@@ -73,7 +79,7 @@ async def fetch_latest_gdelt_sentiment() -> tuple[dict[str, float], list[dict]]:
     with zipfile.ZipFile(io.BytesIO(gkg_resp.content)) as z:
         csv_filename = z.namelist()[0]
         with z.open(csv_filename) as f:
-            # Column 2: SourceCommonName
+            # Column 3: SourceCommonName
             # Column 4: DocumentIdentifier (URL)
             # Column 9: Locations (structured)
             # Column 15: V2Tone (sentiment)
@@ -81,7 +87,7 @@ async def fetch_latest_gdelt_sentiment() -> tuple[dict[str, float], list[dict]]:
                 f, 
                 sep='\t', 
                 header=None, 
-                usecols=[2, 4, 9, 15],
+                usecols=[3, 4, 9, 15],
                 names=['SourceCommonName', 'DocumentIdentifier', 'Locations', 'V2Tone'],
                 encoding='utf-8',
                 on_bad_lines='skip'
@@ -125,6 +131,10 @@ async def fetch_latest_gdelt_sentiment() -> tuple[dict[str, float], list[dict]]:
     
     headlines_list = []
     for _, row in headlines_df.iterrows():
+        source = str(row['SourceCommonName']).lower()
+        if source in HEADLINE_BLOCKLIST:
+            continue
+            
         headlines_list.append({
             "country_code": row['country_code'],
             "url": row['DocumentIdentifier'],
@@ -223,46 +233,3 @@ async def run_gdelt_ingestion(db: AsyncSession):
         logger.error(f"GDELT ingestion failed: {e}", exc_info=True)
         return 0
 
-async def debug_gdelt_raw() -> dict:
-    """
-    Debug function to inspect raw GDELT data.
-    """
-    logger.info("Debugging raw GDELT data...")
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(GDELT_LAST_UPDATE_URL)
-        resp.raise_for_status()
-        
-        lines = resp.text.strip().split('\n')
-        gkg_url = None
-        for line in lines:
-            if '.gkg.csv.zip' in line:
-                gkg_url = line.split()[-1]
-                break
-        
-        if not gkg_url:
-            raise ValueError("Could not find GKG URL")
-        
-        gkg_resp = await client.get(gkg_url)
-        gkg_resp.raise_for_status()
-        
-    with zipfile.ZipFile(io.BytesIO(gkg_resp.content)) as z:
-        csv_filename = z.namelist()[0]
-        with z.open(csv_filename) as f:
-            # Load only first 1000 rows for debugging to be fast
-            df_debug = pd.read_csv(
-                f, 
-                sep='\t', 
-                header=None, 
-                nrows=1000,
-                encoding='utf-8',
-                on_bad_lines='skip'
-            )
-
-    return {
-        "total_rows_parsed": len(df_debug),
-        "column_count": len(df_debug.columns),
-        "col_3_sample": df_debug[3].dropna().head(3).tolist() if 3 in df_debug.columns else None,
-        "col_9_sample": df_debug[9].dropna().head(3).tolist() if 9 in df_debug.columns else None,
-        "col_15_sample": df_debug[15].dropna().head(3).tolist() if 15 in df_debug.columns else None,
-        "col_7_sample": df_debug[7].dropna().head(3).tolist() if 7 in df_debug.columns else None
-    }
